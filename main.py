@@ -68,9 +68,13 @@ def extract_metadata_local(text):
         response = ollama.generate(model="llama3.2", prompt=prompt)
 
         res_text = response["response"].strip()
-        if "```" in res_text:
-            res_text = res_text.split("```")[1].replace("json", "").strip()
-        return json.loads(res_text)
+        import re
+        match = re.search(r'\{.*\}', res_text, re.DOTALL)
+        if match:
+            res_text = match.group(0)
+             
+        data = json.loads(res_text)
+        return data if isinstance(data, dict) else None
     except Exception as e:
         logger.error(f"Erreur parsing LLM: {e}")
         return None
