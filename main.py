@@ -46,11 +46,13 @@ def process_files():
     # Conversion de l'image PIL en bytes pour EasyOCR
     img_byte_arr = BytesIO()
     images[0].save(img_byte_arr, format='JPEG')
-    
-    ocr_results = reader.readtext(img_byte_arr.getvalue(), detail=0)
-    raw_text = " ".join(ocr_results)
 
-    print(f"Données extraites : {raw_text}")
+    print("Ok")
+    
+    # ocr_results = reader.readtext(img_byte_arr.getvalue(), detail=0)
+    # raw_text = " ".join(ocr_results)
+
+    # print(f"Données extraites : {raw_text}")
     break
 
     
