@@ -108,7 +108,7 @@ def process_exam_files():
 
             raw_text = " ".join(reader.readtext(img_byte_arr.getvalue(), detail=0))
             logger.info(
-                f"  [2/4] OCR fini en {time.time() - t1:.2f}s (Texte: {len(raw_text[1000:])} chars)"
+                f"  [2/4] OCR fini en {time.time() - t1:.2f}s (Texte: {len(raw_text)} chars)"
             )
 
             # Nettoyage RAM
