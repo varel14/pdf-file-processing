@@ -17,6 +17,11 @@ import pytesseract
 from PIL import  Image, ImageOps, ImageFilter
 from pdf2image import convert_from_bytes
 from io import BytesIO
+from surya.ocr import run_ocr
+from surya.model.recognition.model import load_model as load_rec_model
+from surya.model.recognition.processor import load_processor as load_rec_processor
+from surya.model.detection.model import load_model as load_det_model
+from surya.model.detection.processor import load_processor as load_det_processor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +31,10 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 # logging.getLogger("ppocr").setLevel(logging.ERROR)
+
+# Surya sépare la détection de texte de la reconnaissance
+det_model, det_processor = load_det_model(), load_det_processor()
+rec_model, rec_processor = load_rec_model(), load_rec_processor()
 
 R2_CONFIG = {
     "account_id": "b6c7083b2dda14cf990b9f8a3807e72d",
@@ -144,8 +153,8 @@ def process_exam_files():
             pdf_content = file_obj["Body"].read()
             logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
 
-            raw_text, ocr_duration = high_res_scan_ocr(pdf_content)
-            logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
+            raw_text = high_res_scan_ocr(pdf_content)
+            # logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
 
             logger.info(f"Resultat: {raw_text}")
 
@@ -215,52 +224,23 @@ def process_exam_files():
         break
 
 def high_res_scan_ocr(pdf_bytes):
-  ocr = PaddleOCR(
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False)
-
-  # Run OCR inference on a sample image 
-  result = ocr.predict(
-      input="https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_002.png")
-
-  # Visualize the results and save the JSON results
-  for res in result:
-      res.print()
-
-  return "Hello", 0
-    # try:
-    #   t_start = time.time()
-      
-    #   with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-    #       page = doc[0]
-    #       pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-          
-    #       # Conversion Pixmap -> Array Numpy (RGB)
-    #       img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.h, pix.w, pix.n))
-          
-    #       # Si c'est du RGBA (4 canaux), on convertit en RGB (3 canaux) pour Paddle
-    #       if pix.n == 4:
-    #           img_array = img_array[:, :, :3]
-
-    #       # Exécution de l'OCR
-    #       result = ocr_engine.predict("download.png")
-
-    #       logger.info(f"Okay: {result}")
-          
-    #       extracted_text = []
-    #       if result and result[0]:
-    #           for line in result[0]:
-    #               # line[1][0] contient la chaîne de texte (line[1][1] est le score de confiance)
-    #               text = line[1][0]
-    #               extracted_text.append(text)
-          
-    #       raw_text = " ".join(extracted_text)
-          
-    #       duration = time.time() - t_start
-    #       return raw_text, duration
-    # except Exception as e:
-    #   print(f"Big error: {e}")
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        page = doc[0]
+        # 300 DPI est recommandé pour Surya
+        pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        
+        # On spécifie ['fr'] pour optimiser la précision
+        langs = ["fr"]
+        predictions = run_ocr([img], [langs], det_model, det_processor, rec_model, rec_processor)
+        
+        # Extraction du texte des lignes détectées
+        extracted_text = []
+        for page_result in predictions:
+            for line in page_result.text_lines:
+                extracted_text.append(line.text)
+                
+        return " ".join(extracted_text)
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
