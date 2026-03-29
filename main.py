@@ -9,7 +9,7 @@ import gc
 import io
 import fitz  # PyMuPDF
 import pytesseract
-from PIL import Image
+from PIL import  Image, ImageOps, ImageFilter
 from pdf2image import convert_from_bytes
 from io import BytesIO
 
@@ -212,25 +212,30 @@ def fast_scan_ocr(pdf_bytes):
         # 2. Rendu de l'image (DPI 150 est le sweet spot vitesse/précision sur CPU)
         # On définit un rectangle pour ne scanner que la moitié supérieure (en-tête)
         rect = page.rect
-        header_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1 * 0.6) # 60% du haut
+        header_rect = fitz.Rect(page.rect.x0, page.rect.y0, page.rect.x1, page.rect.y1 * 0.6)
 
         zoom = 300 / 72
         matrix = fitz.Matrix(zoom, zoom)
         
         pix = page.get_pixmap(matrix=matrix, clip=header_rect)
+
+         # PRÉTRAITEMENT IMAGE
         img = Image.open(io.BytesIO(pix.tobytes("png")))
-        
+        img = img.convert('L')  # Passage en niveaux de gris
+        img = ImageOps.autocontrast(img) # Améliore le contraste
+        # Un léger seuillage pour rendre le texte "net" (Noir/Blanc)
+        img = img.point(lambda x: 0 if x < 140 else 255, '1') 
+
         # 3. OCR avec Tesseract (mode OSD désactivé pour la vitesse)
         # --psm 3 : Analyse automatique de la mise en page
-        custom_config = r'--oem 1 --psm 1'
+        custom_config = r'--oem 3 --psm 6' 
         text = pytesseract.image_to_string(img, lang='fra', config=custom_config)
         
         # Nettoyage manuel
         del pix, img
         gc.collect()
         
-    duration = time.time() - t_start
-    return text, duration
+    return text, time.time() - t_start
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
