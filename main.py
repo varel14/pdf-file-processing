@@ -214,35 +214,38 @@ def process_exam_files():
         break
 
 def high_res_scan_ocr(pdf_bytes):
-    t_start = time.time()
-    
-    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-        page = doc[0]
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-        
-         # Conversion Pixmap -> Array Numpy (RGB)
-        img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.h, pix.w, pix.n))
-        
-        # Si c'est du RGBA (4 canaux), on convertit en RGB (3 canaux) pour Paddle
-        if pix.n == 4:
-            img_array = img_array[:, :, :3]
+    try:
+      t_start = time.time()
+      
+      with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+          page = doc[0]
+          pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+          
+          # Conversion Pixmap -> Array Numpy (RGB)
+          img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.h, pix.w, pix.n))
+          
+          # Si c'est du RGBA (4 canaux), on convertit en RGB (3 canaux) pour Paddle
+          if pix.n == 4:
+              img_array = img_array[:, :, :3]
 
-        # Exécution de l'OCR
-        result = ocr_engine.predict("download.png")
+          # Exécution de l'OCR
+          result = ocr_engine.predict("download.png")
 
-        logger.info(f"Okay: {result}")
-        
-        extracted_text = []
-        if result and result[0]:
-            for line in result[0]:
-                # line[1][0] contient la chaîne de texte (line[1][1] est le score de confiance)
-                text = line[1][0]
-                extracted_text.append(text)
-        
-        raw_text = " ".join(extracted_text)
-        
-        duration = time.time() - t_start
-        return raw_text, duration
+          logger.info(f"Okay: {result}")
+          
+          extracted_text = []
+          if result and result[0]:
+              for line in result[0]:
+                  # line[1][0] contient la chaîne de texte (line[1][1] est le score de confiance)
+                  text = line[1][0]
+                  extracted_text.append(text)
+          
+          raw_text = " ".join(extracted_text)
+          
+          duration = time.time() - t_start
+          return raw_text, duration
+    except Exception as e:
+      print(f"Big error: {e}")
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
