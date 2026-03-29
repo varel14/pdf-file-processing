@@ -38,11 +38,14 @@ cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS extractions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        original_path TEXT,
-        extracted_text TEXT,
-        json_output TEXT,
-        new_r2_path TEXT,
-        proc_time_sec REAL
+        original_path TEXT UNIQUE,          -- Nom du fichier sur R2 (clé unique pour éviter les doublons)
+        extracted_text TEXT,                -- Texte brut issu de l'OCR
+        json_output TEXT,                   -- Résultat JSON complet du LLM
+        new_r2_path TEXT,                   -- Nouveau chemin si SUCCESS (ex: processed/TerminaleD/...)
+        status TEXT DEFAULT 'PENDING',      -- 'SUCCESS', 'FAILED', 'RETRY'
+        proc_time_sec REAL,                 -- Temps total de traitement
+        date_proc TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        error_log TEXT                      -- Détails si status == 'FAILED'
     )
 """)
 conn.commit()
@@ -51,10 +54,11 @@ logger.info("Initialisation de EasyOCR (chargement des modèles)...")
 reader = easyocr.Reader(["fr", "en"])
 
 
-def extract_metadata_local(text):
+def extract_metadata_local(text, filename):
     # On pré-formate les règles pour le LLM
     system_rules = (
       "Tu es un extracteur de métadonnées d'examens scolaires. Réponds UNIQUEMENT en JSON pur. "
+      "SOURCES : Tu as le texte OCR et le NOM DU FICHIER. Priorise le nom du fichier s'il est plus clair."
       "Règles d'équivalences bidirectionnelles impératives pour 'education_level' : "
       "- 'Baccalauréat' ou 'Bac' -> 'Terminale' "
       "- 'Probatoire' -> 'Première' "
@@ -68,7 +72,7 @@ def extract_metadata_local(text):
     )
 
     prompt = f"""
-    Texte à analyser : {text[:2000]}
+    NOM DU FICHIER : {filename}\nTEXTE OCR : {text[:2000]}
     
     Extrait les champs suivants :
     - education_level (utilise les règles d'équivalence)
@@ -77,7 +81,7 @@ def extract_metadata_local(text):
     - school_name (ou null)
     - discipline (Format: Epreuve de ...)
     - serie (ex: A, C, D, TI, SES, G ou null)
-    - language (ex: Allemand, Espagnol si applicable, sinon null)
+    - language (ex: Allemand, Espagnol, si applicable, sinon null)
     """
 
     try:
@@ -88,7 +92,10 @@ def extract_metadata_local(text):
             format='json',
             options={"temperature": 0}
         )
-        return json.loads(response['response'])
+        data = json.loads(response['response'])
+        if not data.get('education_level') or not data.get('discipline') or not data.get("serie"):
+            return None
+        return data
     except Exception as e:
         logger.error(f"Erreur extraction : {e}")
         return None
@@ -134,9 +141,10 @@ def process_exam_files():
             gc.collect()
 
             t2 = time.time()
-            metadata = extract_metadata_local(raw_text)
+            metadata = extract_metadata_local(raw_text, file_key)
             if not metadata:
-                logger.warning(f"  [!] Saut de fichier : Échec extraction métadonnées.")
+                save_to_db(file_key, raw_text, None, None, "FAILED")
+                logger.warning(f"⚠️ Échec d'extraction pour {file_key}. Fichier laissé à la racine.")
                 continue
             logger.info(
                 f"  [3/4] Extraction par LLM (Ollama) finie en {time.time() - t2:.2f}s"
@@ -164,13 +172,14 @@ def process_exam_files():
             logger.info(f"  [4/4] Rangement R2 fini. Chemin : {new_key}")
 
             cursor.execute(
-                "INSERT INTO extractions (original_path, extracted_text, json_output, new_r2_path, proc_time_sec) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO extractions (original_path, extracted_text, json_output, new_r2_path, proc_time_sec, status) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     file_key,
                     raw_text,
                     json.dumps(metadata, ensure_ascii=False),
                     new_key,
                     total_proc,
+                    "SUCCESS"
                 ),
             )
             conn.commit()
@@ -181,6 +190,13 @@ def process_exam_files():
             logger.error(f"❌ Erreur critique sur {file_key}: {e}")
             continue
         break
+
+def save_to_db(old_path, text, json_data, new_path, status):
+    cursor.execute("""
+        INSERT INTO extractions (original_path, extracted_text, json_output, new_r2_path, status, date_proc)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (old_path, text, json.dumps(json_data), new_path, status, time.strftime('%Y-%m-%d %H:%M:%S')))
+    conn.commit()
 
 if __name__ == "__main__":
     logger.info("Démarrage du pipeline d'archivage...")
