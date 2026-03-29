@@ -33,7 +33,7 @@ s3 = boto3.client(
     region_name="auto",
 )
 
-conn = sqlite3.connect("examens_data.db")
+conn = sqlite3.connect("examens_data_v2.db")
 cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS extractions (
