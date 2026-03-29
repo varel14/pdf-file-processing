@@ -3,3 +3,4 @@ easyocr
 ollama
 pdf2image
 sqlite3
+pymupdf

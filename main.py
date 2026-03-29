@@ -7,6 +7,7 @@ import json
 import sqlite3
 import gc
 import os
+import fitz
 from pdf2image import convert_from_bytes
 from io import BytesIO
 
@@ -101,6 +102,96 @@ def extract_metadata_local(text, filename):
         return None
 
 
+# def process_exam_files():
+#     try:
+#         response = s3.list_objects_v2(Bucket=R2_CONFIG["bucket_name"], Delimiter="/")
+#     except Exception as e:
+#         logger.error(f"Impossible de lister le bucket R2: {e}")
+#         return
+
+#     if "Contents" not in response:
+#         logger.info("Aucun fichier PDF trouvé à la racine.")
+#         return
+
+#     for obj in response["Contents"]:
+#         file_key = obj["Key"]
+#         if not file_key.lower().endswith(".pdf"):
+#             continue
+
+#         start_total = time.time()
+#         logger.info(f"--- Début du traitement : {file_key} ---")
+
+#         try:
+#             t0 = time.time()
+#             file_obj = s3.get_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
+#             pdf_content = file_obj["Body"].read()
+#             logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
+
+#             t1 = time.time()
+#             images = convert_from_bytes(pdf_content, first_page=1, last_page=1)
+#             img_byte_arr = BytesIO()
+#             images[0].save(img_byte_arr, format="JPEG", quality=85)
+
+#             raw_text = " ".join(reader.readtext(img_byte_arr.getvalue(), detail=0))
+#             logger.info(
+#                 f"  [2/4] OCR fini en {time.time() - t1:.2f}s (Texte: {len(raw_text)} chars)"
+#             )
+
+#             # Nettoyage RAM
+#             del pdf_content, images, img_byte_arr
+#             gc.collect()
+
+#             t2 = time.time()
+#             metadata = extract_metadata_local(raw_text, file_key)
+#             if not metadata:
+#                 save_to_db(file_key, raw_text, None, None, "FAILED")
+#                 logger.warning(f"⚠️ Échec d'extraction pour {file_key}. Fichier laissé à la racine.")
+#                 continue
+#             logger.info(
+#                 f"  [3/4] Extraction par LLM (Ollama) finie en {time.time() - t2:.2f}s"
+#             )
+
+#             t3 = time.time()
+#             level = str(metadata.get("education_level") or "Inconnu").replace(" ", "")
+#             serie = str(metadata.get("serie") or "").replace(" ", "")
+#             year = str(metadata.get("year") or "0000")
+#             disc = str(metadata.get("discipline") or "Matiere").replace(" ", "_")
+#             lang = str(metadata.get("language") or "FR").replace(" ", "")
+#             school = str(metadata.get("school_name") or "Anonyme").replace(" ", "_")
+
+#             new_key = f"processed/{level}_{serie}/{year}_{disc}_{school}.pdf"
+
+#             # Transfert R2
+#             s3.copy_object(
+#                 Bucket=R2_CONFIG["bucket_name"],
+#                 CopySource={"Bucket": R2_CONFIG["bucket_name"], "Key": file_key},
+#                 Key=new_key,
+#             )
+#             s3.delete_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
+
+#             total_proc = time.time() - start_total
+#             logger.info(f"  [4/4] Rangement R2 fini. Chemin : {new_key}")
+
+#             cursor.execute(
+#                 "INSERT INTO extractions (original_path, extracted_text, json_output, new_r2_path, proc_time_sec, status) VALUES (?, ?, ?, ?, ?, ?)",
+#                 (
+#                     file_key,
+#                     raw_text,
+#                     json.dumps(metadata, ensure_ascii=False),
+#                     new_key,
+#                     total_proc,
+#                     "SUCCESS"
+#                 ),
+#             )
+#             conn.commit()
+
+#             logger.info(f"✅ Terminé avec succès en {total_proc:.2f}s")
+
+#         except Exception as e:
+#             logger.error(f"❌ Erreur critique sur {file_key}: {e}")
+#             continue
+#         break
+
 def process_exam_files():
     try:
         response = s3.list_objects_v2(Bucket=R2_CONFIG["bucket_name"], Delimiter="/")
@@ -108,88 +199,43 @@ def process_exam_files():
         logger.error(f"Impossible de lister le bucket R2: {e}")
         return
 
-    if "Contents" not in response:
-        logger.info("Aucun fichier PDF trouvé à la racine.")
-        return
-
-    for obj in response["Contents"]:
-        file_key = obj["Key"]
-        if not file_key.lower().endswith(".pdf"):
-            continue
-
-        start_total = time.time()
-        logger.info(f"--- Début du traitement : {file_key} ---")
-
-        try:
-            t0 = time.time()
-            file_obj = s3.get_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
-            pdf_content = file_obj["Body"].read()
-            logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
-
-            t1 = time.time()
-            images = convert_from_bytes(pdf_content, first_page=1, last_page=1)
-            img_byte_arr = BytesIO()
-            images[0].save(img_byte_arr, format="JPEG", quality=85)
-
-            raw_text = " ".join(reader.readtext(img_byte_arr.getvalue(), detail=0))
-            logger.info(
-                f"  [2/4] OCR fini en {time.time() - t1:.2f}s (Texte: {len(raw_text)} chars)"
-            )
-
-            # Nettoyage RAM
-            del pdf_content, images, img_byte_arr
-            gc.collect()
-
-            t2 = time.time()
-            metadata = extract_metadata_local(raw_text, file_key)
-            if not metadata:
-                save_to_db(file_key, raw_text, None, None, "FAILED")
-                logger.warning(f"⚠️ Échec d'extraction pour {file_key}. Fichier laissé à la racine.")
-                continue
-            logger.info(
-                f"  [3/4] Extraction par LLM (Ollama) finie en {time.time() - t2:.2f}s"
-            )
-
-            t3 = time.time()
-            level = str(metadata.get("education_level") or "Inconnu").replace(" ", "")
-            serie = str(metadata.get("serie") or "").replace(" ", "")
-            year = str(metadata.get("year") or "0000")
-            disc = str(metadata.get("discipline") or "Matiere").replace(" ", "_")
-            lang = str(metadata.get("language") or "FR").replace(" ", "")
-            school = str(metadata.get("school_name") or "Anonyme").replace(" ", "_")
-
-            new_key = f"processed/{level}_{serie}/{year}_{disc}_{school}.pdf"
-
-            # Transfert R2
-            s3.copy_object(
-                Bucket=R2_CONFIG["bucket_name"],
-                CopySource={"Bucket": R2_CONFIG["bucket_name"], "Key": file_key},
-                Key=new_key,
-            )
-            s3.delete_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
-
-            total_proc = time.time() - start_total
-            logger.info(f"  [4/4] Rangement R2 fini. Chemin : {new_key}")
-
-            cursor.execute(
-                "INSERT INTO extractions (original_path, extracted_text, json_output, new_r2_path, proc_time_sec, status) VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    file_key,
-                    raw_text,
-                    json.dumps(metadata, ensure_ascii=False),
-                    new_key,
-                    total_proc,
-                    "SUCCESS"
-                ),
-            )
-            conn.commit()
-
-            logger.info(f"✅ Terminé avec succès en {total_proc:.2f}s")
-
-        except Exception as e:
-            logger.error(f"❌ Erreur critique sur {file_key}: {e}")
-            continue
-        break
+    for obj in response.get('Contents', []):
+      file_key = obj['Key']
+      if not file_key.lower().endswith('.pdf'): 
+        continue
+      
+      print(f"--- Chargement : {file_key} ---")
+      
+      # Récupération en streaming pour éviter de tout charger d'un coup
+      file_obj = s3.get_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
+      pdf_data = file_obj['Body'].read()
+      
+      # Ouverture du PDF avec PyMuPDF
+      with fitz.open(stream=pdf_data, filetype="pdf") as doc:
+          # Tenter d'extraire le texte directement (si ce n'est pas une image)
+          raw_text = ""
+          for page in doc[:2]: # 2 premières pages seulement
+              raw_text += page.get_text()
+          
+          # Si le PDF est un scan (pas de texte), faire un rendu image léger
+          if len(raw_text.strip()) < 50:
+              print("⚠️ Scan détecté, passage à l'OCR...")
+              # page = doc[0]
+              # pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)) # Résolution modérée
+              # img_data = pix.tobytes("jpg")
+              
+              # # OCR sur l'image
+              # ocr_results = reader.readtext(img_data, detail=0)
+              # raw_text = " ".join(ocr_results)
+      
+      # Libération explicite de la mémoire
+      del pdf_data
+      
+      if raw_text:
+          pass
+          # print("Texte extrait, envoi à Ollama...")
+          # data = extract_metadata_local(raw_text)
+          # print(f"Résultat : {data}")
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
