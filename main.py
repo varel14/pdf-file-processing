@@ -13,7 +13,7 @@ import pytesseract
 from PIL import  Image, ImageOps, ImageFilter
 from pdf2image import convert_from_bytes
 from io import BytesIO
-from surya.ocr import run_ocr
+from surya.pipeline import run_ocr
 from surya.model.recognition.model import load_model as load_rec_model
 from surya.model.recognition.processor import load_processor as load_rec_processor
 from surya.model.detection.model import load_model as load_det_model
