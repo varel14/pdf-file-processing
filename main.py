@@ -230,6 +230,8 @@ def high_res_scan_ocr(pdf_bytes):
 
         # Exécution de l'OCR
         result = ocr_engine.predict(img_array)
+
+        logger.info(f"Okay: {result}")
         
         # Extraction du texte
         raw_text = ""
