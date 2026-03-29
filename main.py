@@ -229,7 +229,7 @@ def high_res_scan_ocr(pdf_bytes):
         img_array = np.array(img)
 
         # Exécution de l'OCR
-        result = ocr_engine.ocr(img_array, cls=True)
+        result = ocr_engine.ocr(img_array)
         
         # Extraction du texte
         raw_text = ""
