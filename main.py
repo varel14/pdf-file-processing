@@ -1,10 +1,6 @@
-import os
-os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
-
 import logging
 import time
 import boto3
-from paddleocr import PaddleOCR
 import numpy as np
 import easyocr
 import ollama
