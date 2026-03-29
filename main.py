@@ -129,8 +129,8 @@ def process_exam_files():
             pdf_content = file_obj["Body"].read()
             logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
 
-            raw_text, ocr_duration = fast_scan_ocr(pdf_content)
-            logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
+            raw_text = fast_scan_ocr(pdf_content)
+            # logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
 
             logger.info(f"Resultat: {raw_text}")
 
@@ -211,31 +211,24 @@ def fast_scan_ocr(pdf_bytes):
         
         # 2. Rendu de l'image (DPI 150 est le sweet spot vitesse/précision sur CPU)
         # On définit un rectangle pour ne scanner que la moitié supérieure (en-tête)
-        rect = page.rect
-        header_rect = fitz.Rect(page.rect.x0, page.rect.y0, page.rect.x1, page.rect.y1 * 0.6)
-
         zoom = 300 / 72
         matrix = fitz.Matrix(zoom, zoom)
         
+        header_rect = fitz.Rect(page.rect.x0, page.rect.y0, page.rect.x1, page.rect.y1 * 0.7)
         pix = page.get_pixmap(matrix=matrix, clip=header_rect)
-
-         # PRÉTRAITEMENT IMAGE
+        
         img = Image.open(io.BytesIO(pix.tobytes("png")))
-        img = img.convert('L')  # Passage en niveaux de gris
-        img = ImageOps.autocontrast(img) # Améliore le contraste
-        # Un léger seuillage pour rendre le texte "net" (Noir/Blanc)
-        img = img.point(lambda x: 0 if x < 140 else 255, '1') 
 
         # 3. OCR avec Tesseract (mode OSD désactivé pour la vitesse)
         # --psm 3 : Analyse automatique de la mise en page
-        custom_config = r'--oem 3 --psm 6' 
+        custom_config = r'--oem 3 --psm 3'
         text = pytesseract.image_to_string(img, lang='fra', config=custom_config)
         
         # Nettoyage manuel
         del pix, img
         gc.collect()
         
-    return text, time.time() - t_start
+    return text
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
