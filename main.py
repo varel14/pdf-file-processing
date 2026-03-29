@@ -218,28 +218,28 @@ def high_res_scan_ocr(pdf_bytes):
     
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
         page = doc[0]
-        # 300 DPI pour PaddleOCR est idéal
-        zoom = 300 / 72
-        matrix = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
         
-        # On crop l'en-tête (70% du haut)
-        header_rect = fitz.Rect(page.rect.x0, page.rect.y0, page.rect.x1, page.rect.y1 * 0.7)
-        pix = page.get_pixmap(matrix=matrix, clip=header_rect)
+         # Conversion Pixmap -> Array Numpy (RGB)
+        img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.h, pix.w, pix.n))
         
-        # Convertir le pixmap en format compatible Paddle (numpy array)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        img_array = np.array(img)
+        # Si c'est du RGBA (4 canaux), on convertit en RGB (3 canaux) pour Paddle
+        if pix.n == 4:
+            img_array = img_array[:, :, :3]
 
         # Exécution de l'OCR
         result = ocr_engine.predict(img_array)
 
         logger.info(f"Okay: {result}")
         
-        # Extraction du texte
-        raw_text = ""
+        extracted_text = []
         if result and result[0]:
-            # Paddle retourne une liste de [box, (text, confidence)]
-            raw_text = " ".join([line[1][0] for line in result[0]])
+            for line in result[0]:
+                # line[1][0] contient la chaîne de texte (line[1][1] est le score de confiance)
+                text = line[1][0]
+                extracted_text.append(text)
+        
+        raw_text = " ".join(extracted_text)
         
         duration = time.time() - t_start
         return raw_text, duration
