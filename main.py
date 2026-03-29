@@ -6,8 +6,10 @@ import ollama
 import json
 import sqlite3
 import gc
-import os
-import fitz
+import io
+import fitz  # PyMuPDF
+import pytesseract
+from PIL import Image
 from pdf2image import convert_from_bytes
 from io import BytesIO
 
@@ -102,30 +104,35 @@ def extract_metadata_local(text, filename):
         return None
 
 
-# def process_exam_files():
-#     try:
-#         response = s3.list_objects_v2(Bucket=R2_CONFIG["bucket_name"], Delimiter="/")
-#     except Exception as e:
-#         logger.error(f"Impossible de lister le bucket R2: {e}")
-#         return
+def process_exam_files():
+    try:
+        response = s3.list_objects_v2(Bucket=R2_CONFIG["bucket_name"], Delimiter="/")
+    except Exception as e:
+        logger.error(f"Impossible de lister le bucket R2: {e}")
+        return
 
-#     if "Contents" not in response:
-#         logger.info("Aucun fichier PDF trouvé à la racine.")
-#         return
+    if "Contents" not in response:
+        logger.info("Aucun fichier PDF trouvé à la racine.")
+        return
 
-#     for obj in response["Contents"]:
-#         file_key = obj["Key"]
-#         if not file_key.lower().endswith(".pdf"):
-#             continue
+    for obj in response["Contents"]:
+        file_key = obj["Key"]
+        if not file_key.lower().endswith(".pdf"):
+            continue
 
-#         start_total = time.time()
-#         logger.info(f"--- Début du traitement : {file_key} ---")
+        start_total = time.time()
+        logger.info(f"--- Début du traitement : {file_key} ---")
 
-#         try:
-#             t0 = time.time()
-#             file_obj = s3.get_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
-#             pdf_content = file_obj["Body"].read()
-#             logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
+        try:
+            t0 = time.time()
+            file_obj = s3.get_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
+            pdf_content = file_obj["Body"].read()
+            logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
+
+            raw_text, ocr_duration = fast_scan_ocr(pdf_content)
+            logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
+
+            logger.info(f"Resultat: {raw_text}")
 
 #             t1 = time.time()
 #             images = convert_from_bytes(pdf_content, first_page=1, last_page=1)
@@ -187,55 +194,39 @@ def extract_metadata_local(text, filename):
 
 #             logger.info(f"✅ Terminé avec succès en {total_proc:.2f}s")
 
-#         except Exception as e:
-#             logger.error(f"❌ Erreur critique sur {file_key}: {e}")
-#             continue
-#         break
+        except Exception as e:
+            logger.error(f"❌ Erreur critique sur {file_key}: {e}")
+            continue
+        break
 
-def process_exam_files():
-    try:
-        response = s3.list_objects_v2(Bucket=R2_CONFIG["bucket_name"], Delimiter="/")
-    except Exception as e:
-        logger.error(f"Impossible de lister le bucket R2: {e}")
-        return
-
-    for obj in response.get('Contents', []):
-      file_key = obj['Key']
-      if not file_key.lower().endswith('.pdf'): 
-        continue
-      
-      print(f"--- Chargement : {file_key} ---")
-      
-      # Récupération en streaming pour éviter de tout charger d'un coup
-      file_obj = s3.get_object(Bucket=R2_CONFIG["bucket_name"], Key=file_key)
-      pdf_data = file_obj['Body'].read()
-      
-      # Ouverture du PDF avec PyMuPDF
-      with fitz.open(stream=pdf_data, filetype="pdf") as doc:
-          # Tenter d'extraire le texte directement (si ce n'est pas une image)
-          raw_text = ""
-          for page in doc[:2]: # 2 premières pages seulement
-              raw_text += page.get_text()
-          
-          # Si le PDF est un scan (pas de texte), faire un rendu image léger
-          if len(raw_text.strip()) < 50:
-              print("⚠️ Scan détecté, passage à l'OCR...")
-              # page = doc[0]
-              # pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)) # Résolution modérée
-              # img_data = pix.tobytes("jpg")
-              
-              # # OCR sur l'image
-              # ocr_results = reader.readtext(img_data, detail=0)
-              # raw_text = " ".join(ocr_results)
-      
-      # Libération explicite de la mémoire
-      del pdf_data
-      
-      if raw_text:
-          pass
-          # print("Texte extrait, envoi à Ollama...")
-          # data = extract_metadata_local(raw_text)
-          # print(f"Résultat : {data}")
+def fast_scan_ocr(pdf_bytes):
+    """
+    OCR optimisé pour CPU : cible uniquement l'en-tête (50% haut de page).
+    """
+    t_start = time.time()
+    
+    # 1. Ouvrir le PDF en mémoire
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        page = doc[0]  # On ne traite que la 1ère page (suffisant pour les métadonnées)
+        
+        # 2. Rendu de l'image (DPI 150 est le sweet spot vitesse/précision sur CPU)
+        # On définit un rectangle pour ne scanner que la moitié supérieure (en-tête)
+        rect = page.rect
+        header_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1 * 0.6) # 60% du haut
+        
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), clip=header_rect)
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        
+        # 3. OCR avec Tesseract (mode OSD désactivé pour la vitesse)
+        # --psm 3 : Analyse automatique de la mise en page
+        text = pytesseract.image_to_string(img, lang='fra', config='--psm 3')
+        
+        # Nettoyage manuel
+        del pix, img
+        gc.collect()
+        
+    duration = time.time() - t_start
+    return text, duration
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
