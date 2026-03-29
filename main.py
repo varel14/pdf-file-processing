@@ -51,33 +51,46 @@ logger.info("Initialisation de EasyOCR (chargement des modèles)...")
 reader = easyocr.Reader(["fr", "en"])
 
 
-def extract_metadata_local(text):
+def get_metadata_fast(text):
+    # On pré-formate les règles pour le LLM
+    system_rules = (
+      "Tu es un extracteur de métadonnées d'examens scolaires. Réponds UNIQUEMENT en JSON pur. "
+      "Règles d'équivalences bidirectionnelles impératives pour 'education_level' : "
+      "- 'Baccalauréat' ou 'Bac' -> 'Terminale' "
+      "- 'Probatoire' -> 'Première' "
+      "- 'BEPC' -> 'Troisième' "
+      "- Si le texte dit déjà 'Terminale', garde 'Terminale'. "
+      "- Si le texte dit déjà 'Première', garde 'Première'. "  
+      "Instructions de formatage : "
+      "1. 'discipline' : Doit TOUJOURS être sous la forme 'Epreuve de [Matière]' "
+      "2. 'serie' : Extraire uniquement la lettre ou le sigle (A, C, D, TI, SES, G) "
+      "3. 'language' : Si l'épreuve est une épreuve de langue (ex: Allemand, Espagnol, Chinois, Italien), précise la langue, sinon null."
+    )
+
     prompt = f"""
-    Analyse ce texte d'examen et retourne un JSON pur (sans texte autour) :
-    - education_level (ex: Terminale, Première, Troisième)
+    Texte à analyser : {text[:2000]}
+    
+    Extrait les champs suivants :
+    - education_level (utilise les règles d'équivalence)
     - exam_type (ex: Baccalauréat, Probatoire, BEPC)
-    - year (ex: 2023)
-    - school_name (nom de l'école ou null)
-    - discipline (Format: Epreuve de [Nom de la matière])
-    - serie (Série A, C, D, TI, SES, etc.)
-    - language (Espagnol, Allemand, Chinois, Italien, etc. ou null)
-    Note que Baccalauréat<=>Terminale, Probatoire<=>Première, BEPC<=>Troisième
-
-    Texte : {text[:2500]}
+    - year (ex: 2024)
+    - school_name (ou null)
+    - discipline (Format: Epreuve de ...)
+    - serie (ex: A, C, D, TI, SES, G ou null)
+    - language (ex: Allemand, Espagnol si applicable, sinon null)
     """
+
     try:
-        response = ollama.generate(model="llama3.2", prompt=prompt)
-
-        res_text = response["response"].strip()
-        import re
-        match = re.search(r'\{.*\}', res_text, re.DOTALL)
-        if match:
-            res_text = match.group(0)
-
-        data = json.loads(res_text)
-        return data if isinstance(data, dict) else None
+        response = ollama.generate(
+            model='llama3.2', 
+            prompt=prompt, 
+            system=system_rules,
+            format='json',
+            options={"temperature": 0}
+        )
+        return json.loads(response['response'])
     except Exception as e:
-        logger.error(f"Erreur parsing LLM: {e}")
+        logger.error(f"Erreur extraction : {e}")
         return None
 
 
