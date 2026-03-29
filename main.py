@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-logging.getLogger("ppocr").setLevel(logging.ERROR)
+# logging.getLogger("ppocr").setLevel(logging.ERROR)
 
 R2_CONFIG = {
     "account_id": "b6c7083b2dda14cf990b9f8a3807e72d",
@@ -68,7 +68,6 @@ ocr_engine = PaddleOCR(
     use_textline_orientation=True,
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
-    show_log=True
     # enable_mkldnn=True             # Accélère l'inférence sur CPU Intel/AMD
 )
 
