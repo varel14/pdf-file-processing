@@ -47,12 +47,12 @@ def process_files():
     img_byte_arr = BytesIO()
     images[0].save(img_byte_arr, format='JPEG')
 
-    print("Ok")
+    print("Test")
     
-    # ocr_results = reader.readtext(img_byte_arr.getvalue(), detail=0)
-    # raw_text = " ".join(ocr_results)
+    ocr_results = reader.readtext(img_byte_arr.getvalue(), detail=0)
+    raw_text = " ".join(ocr_results)
 
-    # print(f"Données extraites : {raw_text}")
+    print(f"Données extraites : {raw_text}")
     break
 
     
