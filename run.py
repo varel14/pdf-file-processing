@@ -1,12 +1,25 @@
 from pdf2image import convert_from_path
-from surya.ocr import run_ocr
+from surya.detection import DetectionPredictor
+from surya.recognition import RecognitionPredictor
 
-# Convert PDF to images
+# Load models
+detector = DetectionPredictor()
+recognizer = RecognitionPredictor()
+
+# Convert PDF → images
 images = convert_from_path("document.pdf")
 
-# Run OCR
-results = run_ocr(images)
+all_text = []
 
-# Print extracted text
-for page in results:
-    print(page.text)
+for image in images:
+    # Detect text regions
+    detections = detector([image])[0]
+
+    # Recognize text
+    lines = recognizer([image], [detections])[0]
+
+    for line in lines:
+        all_text.append(line.text)
+
+# Print result
+print("\n".join(all_text))
