@@ -1,10 +1,12 @@
 from pdf2image import convert_from_path
 from surya.detection import DetectionPredictor
 from surya.recognition import RecognitionPredictor
+from surya.foundation import FoundationPredictor
 
 # Load models
+foundation = FoundationPredictor()
 detector = DetectionPredictor()
-recognizer = RecognitionPredictor()
+recognizer = RecognitionPredictor(foundation)
 
 # Convert PDF → images
 images = convert_from_path("document.pdf")
