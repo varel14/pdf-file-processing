@@ -14,11 +14,7 @@ images = convert_from_path("document.pdf")
 all_text = []
 
 for image in images:
-    # Detect text regions
-    detections = detector([image])[0]
-
-    # Recognize text
-    lines = recognizer([image], [detections])[0]
+    lines = recognizer([image], det_predictor=detector)[0]
 
     for line in lines:
         all_text.append(line.text)
