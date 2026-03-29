@@ -51,7 +51,7 @@ logger.info("Initialisation de EasyOCR (chargement des modèles)...")
 reader = easyocr.Reader(["fr", "en"])
 
 
-def get_metadata_fast(text):
+def extract_metadata_local(text):
     # On pré-formate les règles pour le LLM
     system_rules = (
       "Tu es un extracteur de métadonnées d'examens scolaires. Réponds UNIQUEMENT en JSON pur. "
