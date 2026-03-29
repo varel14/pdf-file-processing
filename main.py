@@ -68,6 +68,7 @@ ocr_engine = PaddleOCR(
     use_textline_orientation=True,
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
+    cpu_threads=2,
     # enable_mkldnn=True             # Accélère l'inférence sur CPU Intel/AMD
 )
 
