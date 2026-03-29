@@ -1,6 +1,8 @@
 import logging
 import time
 import boto3
+from paddleocr import PaddleOCR
+import numpy as np
 import easyocr
 import ollama
 import json
@@ -18,7 +20,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.FileHandler("processing.log"), logging.StreamHandler()],
 )
+
 logger = logging.getLogger(__name__)
+logging.getLogger("ppocr").setLevel(logging.ERROR)
 
 R2_CONFIG = {
     "account_id": "b6c7083b2dda14cf990b9f8a3807e72d",
@@ -56,6 +60,7 @@ conn.commit()
 logger.info("Initialisation de EasyOCR (chargement des modèles)...")
 reader = easyocr.Reader(["fr", "en"])
 
+ocr_engine = PaddleOCR(use_angle_cls=True, lang='fr', show_log=False)
 
 def extract_metadata_local(text, filename):
     # On pré-formate les règles pour le LLM
@@ -129,8 +134,8 @@ def process_exam_files():
             pdf_content = file_obj["Body"].read()
             logger.info(f"  [1/4] Download R2 fini en {time.time() - t0:.2f}s")
 
-            raw_text = fast_scan_ocr(pdf_content)
-            # logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
+            raw_text, ocr_duration = high_res_scan_ocr(pdf_content)
+            logger.info(f"  OCR (Tesseract) fini en {ocr_duration:.2f}s")
 
             logger.info(f"Resultat: {raw_text}")
 
@@ -199,36 +204,34 @@ def process_exam_files():
             continue
         break
 
-def fast_scan_ocr(pdf_bytes):
-    """
-    OCR optimisé pour CPU : cible uniquement l'en-tête (50% haut de page).
-    """
+def high_res_scan_ocr(pdf_bytes):
     t_start = time.time()
     
-    # 1. Ouvrir le PDF en mémoire
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-        page = doc[0]  # On ne traite que la 1ère page (suffisant pour les métadonnées)
-        
-        # 2. Rendu de l'image (DPI 150 est le sweet spot vitesse/précision sur CPU)
-        # On définit un rectangle pour ne scanner que la moitié supérieure (en-tête)
+        page = doc[0]
+        # 300 DPI pour PaddleOCR est idéal
         zoom = 300 / 72
         matrix = fitz.Matrix(zoom, zoom)
         
+        # On crop l'en-tête (70% du haut)
         header_rect = fitz.Rect(page.rect.x0, page.rect.y0, page.rect.x1, page.rect.y1 * 0.7)
         pix = page.get_pixmap(matrix=matrix, clip=header_rect)
         
+        # Convertir le pixmap en format compatible Paddle (numpy array)
         img = Image.open(io.BytesIO(pix.tobytes("png")))
+        img_array = np.array(img)
 
-        # 3. OCR avec Tesseract (mode OSD désactivé pour la vitesse)
-        # --psm 3 : Analyse automatique de la mise en page
-        custom_config = r'--oem 3 --psm 3'
-        text = pytesseract.image_to_string(img, lang='fra', config=custom_config)
+        # Exécution de l'OCR
+        result = ocr_engine.ocr(img_array, cls=True)
         
-        # Nettoyage manuel
-        del pix, img
-        gc.collect()
+        # Extraction du texte
+        raw_text = ""
+        if result and result[0]:
+            # Paddle retourne une liste de [box, (text, confidence)]
+            raw_text = " ".join([line[1][0] for line in result[0]])
         
-    return text
+        duration = time.time() - t_start
+        return raw_text, duration
 
 def save_to_db(old_path, text, json_data, new_path, status):
     cursor.execute("""
