@@ -61,3 +61,6 @@ def process_files():
     
     # # 4. Classification (Optionnel : déplacer le fichier)
     # classify_file_on_r2(file_key, extracted_data)
+
+if __name__ == "__main__":
+  process_files()
