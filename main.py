@@ -66,6 +66,7 @@ reader = easyocr.Reader(["fr", "en"])
 ocr_engine = PaddleOCR(
     use_textline_orientation=True, # Remplace use_angle_cls
     lang='fr', 
+    use_gpu=False,
     enable_mkldnn=True             # Accélère l'inférence sur CPU Intel/AMD
 )
 
