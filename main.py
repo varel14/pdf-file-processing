@@ -213,13 +213,17 @@ def fast_scan_ocr(pdf_bytes):
         # On définit un rectangle pour ne scanner que la moitié supérieure (en-tête)
         rect = page.rect
         header_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1 * 0.6) # 60% du haut
+
+        zoom = 300 / 72
+        matrix = fitz.Matrix(zoom, zoom)
         
-        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), clip=header_rect)
+        pix = page.get_pixmap(matrix=matrix, clip=header_rect)
         img = Image.open(io.BytesIO(pix.tobytes("png")))
         
         # 3. OCR avec Tesseract (mode OSD désactivé pour la vitesse)
         # --psm 3 : Analyse automatique de la mise en page
-        text = pytesseract.image_to_string(img, lang='fra', config='--psm 3')
+        custom_config = r'--oem 1 --psm 1'
+        text = pytesseract.image_to_string(img, lang='fra', config=custom_config)
         
         # Nettoyage manuel
         del pix, img
