@@ -58,9 +58,10 @@ def extract_metadata_local(text):
     - exam_type (ex: Baccalauréat, Probatoire, BEPC)
     - year (ex: 2023)
     - school_name (nom de l'école ou null)
-    - discipline (Format: "Epreuve de [Nom de la matière]")
+    - discipline (Format: Epreuve de [Nom de la matière])
     - serie (Série A, C, D, TI, SES, etc.)
     - language (Espagnol, Allemand, Chinois, Italien, etc. ou null)
+    Note que Baccalauréat<=>Terminale, Probatoire<=>Première, BEPC<=>Troisième
 
     Texte : {text[:2500]}
     """
@@ -72,7 +73,7 @@ def extract_metadata_local(text):
         match = re.search(r'\{.*\}', res_text, re.DOTALL)
         if match:
             res_text = match.group(0)
-             
+
         data = json.loads(res_text)
         return data if isinstance(data, dict) else None
     except Exception as e:
