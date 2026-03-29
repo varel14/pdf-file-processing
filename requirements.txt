@@ -5,5 +5,3 @@ pdf2image
 pymupdf
 pytesseract
 Pillow
-langchain 
-langchain-community
