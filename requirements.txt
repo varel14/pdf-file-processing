@@ -2,3 +2,4 @@ boto3
 easyocr
 ollama
 pdf2image
+sqlite3
