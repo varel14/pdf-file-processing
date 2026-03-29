@@ -228,7 +228,7 @@ def high_res_scan_ocr(pdf_bytes):
             img_array = img_array[:, :, :3]
 
         # Exécution de l'OCR
-        result = ocr_engine.predict(img_array)
+        result = ocr_engine.predict("download.png")
 
         logger.info(f"Okay: {result}")
         
