@@ -72,14 +72,14 @@ conn.commit()
 logger.info("Initialisation de EasyOCR (chargement des modèles)...")
 reader = easyocr.Reader(["fr", "en"])
 
-ocr_engine = PaddleOCR(
-    lang='fr', 
-    use_textline_orientation=True,
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    cpu_threads=2,
-    # enable_mkldnn=True             # Accélère l'inférence sur CPU Intel/AMD
-)
+# ocr_engine = PaddleOCR(
+#     lang='fr', 
+#     use_textline_orientation=True,
+#     use_doc_orientation_classify=False,
+#     use_doc_unwarping=False,
+#     cpu_threads=2,
+#     # enable_mkldnn=True             # Accélère l'inférence sur CPU Intel/AMD
+# )
 
 def extract_metadata_local(text, filename):
     # On pré-formate les règles pour le LLM
