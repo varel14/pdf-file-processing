@@ -6,11 +6,11 @@ from pdf2image import convert_from_bytes
 from io import BytesIO
 
 R2_CONFIG = {
-  "account_id": "VOTRE_ACCOUNT_ID",
-  "access_key": "VOTRE_ACCESS_KEY",
-  "secret_key": "VOTRE_SECRET_KEY",
-  "bucket_name": "NOM_DU_BUCKET",
-  "endpoint_url": "https://VOTRE_ACCOUNT_://cloudflarestorage.com"
+  "account_id": "b6c7083b2dda14cf990b9f8a3807e72d",
+  "access_key": "d29ad6a70b9c8e139bcdadd704712473",
+  "secret_key": "78ea3942a5d9699851e1a242f68b56221ec6dca21dfac45f509b0658af20914f",
+  "bucket_name": "materials",
+  "endpoint_url": "https://b6c7083b2dda14cf990b9f8a3807e72d.r2.cloudflarestorage.com"
 }
 
 s3 = boto3.client(
