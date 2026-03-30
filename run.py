@@ -9,7 +9,7 @@ detector = DetectionPredictor()
 recognizer = RecognitionPredictor(foundation)
 
 # Convert PDF → images
-images = convert_from_path("document.pdf")
+images = convert_from_path("document.pdf", dpi=150)
 
 all_text = []
 
@@ -17,9 +17,9 @@ for image in images:
     lines = recognizer([image], det_predictor=detector)[0]
 
     for line in lines:
+        text, bbox, conf = line
         print(line)
         print("\n\n")
-        text = line[0]
         all_text.append(text)
 
 # Print result

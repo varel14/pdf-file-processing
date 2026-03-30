@@ -2,3 +2,4 @@ requests
 pdf2image 
 pillow
 surya-ocr
+numpy

@@ -1,5 +1,6 @@
 from pdf2image import convert_from_path
 from paddleocr import PaddleOCR
+import numpy as np
 
 # Init OCR (CPU)
 ocr = PaddleOCR(
@@ -15,7 +16,7 @@ images = convert_from_path("document.pdf", dpi=150)
 all_text = []
 
 for image in images:
-    result = ocr.ocr(image, cls=True)
+    result = ocr.ocr(np.array(image), cls=True)
 
     for line in result[0]:
         text = line[1][0]
