@@ -17,6 +17,8 @@ for image in images:
     lines = recognizer([image], det_predictor=detector)[0]
 
     for line in lines:
+        print(line)
+        print("\n\n")
         text = line[0]
         all_text.append(text)
 
